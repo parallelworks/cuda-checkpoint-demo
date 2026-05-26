@@ -69,6 +69,33 @@ fi
 # ── Step 1: Suspend CUDA state ────────────────────────────────────────────────
 echo ""
 echo "[1/3] Suspending CUDA state …"
+
+# Poll until CUDA state is 'running' (it may be 'checkpointed' if a prior toggle
+# left GPU state suspended, or temporarily unavailable during late init).
+WAIT_MAX=30
+WAITED=0
+while true; do
+    CUDA_STATE=$("$CUDA_CKPT" --get-state --pid "$PID" 2>&1 || true)
+    echo "      cuda-checkpoint --get-state --pid $PID → ${CUDA_STATE}"
+    if [[ "$CUDA_STATE" == "running" ]]; then
+        break
+    fi
+    # If already checkpointed from a prior failed attempt, resume first
+    if [[ "$CUDA_STATE" == "checkpointed" ]]; then
+        echo "      State is 'checkpointed' — resuming before re-toggling..."
+        "$CUDA_CKPT" --toggle --pid "$PID" 2>&1 || true
+        sleep 1
+        continue
+    fi
+    WAITED=$((WAITED + 1))
+    if [[ $WAITED -ge $WAIT_MAX ]]; then
+        echo "ERROR: CUDA state never reached 'running' after ${WAIT_MAX}s (last: ${CUDA_STATE})"
+        exit 1
+    fi
+    echo "      Waiting for CUDA to be ready (${WAITED}/${WAIT_MAX}s) ..."
+    sleep 1
+done
+
 echo "      cuda-checkpoint --toggle --pid $PID"
 "$CUDA_CKPT" --toggle --pid "$PID"
 echo "      GPU memory copied to host; GPU resources released."

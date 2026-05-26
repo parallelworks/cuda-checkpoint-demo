@@ -207,7 +207,7 @@ jobs:
           max_iter:
             label: Max Iterations
             type: string
-            default: '100000'
+            default: '500000'
             tooltip: |
               Higher values produce more detail and take longer.
               10 000  → ~10 s  |  100 000 → ~2 min  |  500 000 → ~10 min
