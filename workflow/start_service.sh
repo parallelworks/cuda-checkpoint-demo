@@ -2,7 +2,7 @@
 # start_service.sh — The actual job script (runs on the COMPUTE node).
 #
 # Appended to boilerplate that already:
-#   - sourced inputs.sh  (fractal_*, bucket, bucket_path, restart are exported)
+#   - sourced inputs.sh  (fractal_*, bucket_uri, bucket_path, restart are exported)
 #   - set service_port via `pw agent open-port`
 #   - wrote SESSION_PORT and HOSTNAME files
 #   - registered cleanup() trap that calls cancel.sh then kills the process group
@@ -29,53 +29,92 @@ mkdir -p "${SHARED_DIR}"
 
 # ── Write cancel.sh ─────────────────────────────────────────────────────────────
 # The boilerplate's cleanup() runs this when SIGTERM arrives (platform cancel).
-# Written to ${PW_PARENT_JOB_DIR} which is the CWD established by run.sh.
-# The heredoc uses single quotes so variable expansion happens at run time,
-# not at write time; exported vars (bucket, bucket_path) are inherited by the
-# child bash process that executes cancel.sh.
+# Written to ${PW_PARENT_JOB_DIR} (= CWD established by run.sh).
+# Single-quoted heredoc: variables expand at run time from the inherited env.
+# bucket_uri is the pw:// URI extracted directly via ${{ inputs.bucket.uri }}
+# in general.yaml — no JSON parsing needed here.
 cat > "${PW_PARENT_JOB_DIR}/cancel.sh" << 'CANCEL_EOF'
 #!/bin/bash
 set -x
+
+_LOG="${PW_PARENT_JOB_DIR}/cancel.log"
+exec > >(tee -a "${_LOG}") 2>&1
+
 _DEMO_DIR="${HOME}/cuda-checkpoint-demo"
 _SHARED_DIR="${_DEMO_DIR}/shared"
 _CHECKPOINT_DIR="${_DEMO_DIR}/checkpoints"
 
-echo "=== cancel.sh: workflow canceled — checkpointing mandelbrot... ==="
+# Normalise path: strip leading and trailing slashes
+_BPATH="${bucket_path:-}"
+_BPATH="${_BPATH#/}"
+_BPATH="${_BPATH%/}"
 
+_DEST="${bucket_uri}/${_BPATH}/checkpoints"
+
+echo "========================================================"
+echo "cancel.sh  started : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo "host               : $(hostname)"
+echo "job dir            : ${PW_PARENT_JOB_DIR:-unknown}"
+echo "bucket URI         : ${bucket_uri:-<empty>}"
+echo "bucket path        : ${_BPATH:-<empty>}"
+echo "upload destination : ${_DEST}"
+echo "========================================================"
+
+echo ""
+echo "--- Checkpoint ---"
 _RAN_CHECKPOINT=0
 if [ -f "${_SHARED_DIR}/pid.txt" ]; then
     _PID=$(tr -d '[:space:]' < "${_SHARED_DIR}/pid.txt")
+    echo "  pid.txt PID : ${_PID}"
     if kill -0 "${_PID}" 2>/dev/null; then
-        echo "Checkpointing PID ${_PID}..."
+        echo "  Process is running — checkpointing..."
         bash "${_DEMO_DIR}/03_checkpoint/checkpoint.sh" \
             && _RAN_CHECKPOINT=1 \
-            || echo "WARNING: checkpoint failed — skipping bucket upload"
+            || echo "  WARNING: checkpoint.sh failed — skipping upload"
     else
-        echo "Process ${_PID} is no longer running — no checkpoint needed"
+        echo "  Process ${_PID} already finished — no checkpoint needed"
     fi
 else
-    echo "No pid.txt found — skipping checkpoint"
+    echo "  No pid.txt found — skipping checkpoint"
 fi
 
-if [ "${_RAN_CHECKPOINT}" -eq 1 ] && [ -n "${bucket:-}" ] && [ -n "${bucket_path:-}" ]; then
-    _BPATH="${bucket_path%/}"
-    echo "Uploading checkpoint to ${bucket}:${_BPATH}/checkpoints/ ..."
-    pw buckets cp -r "${_CHECKPOINT_DIR}/" "${bucket}:${_BPATH}/checkpoints/" \
-        && echo "Checkpoint uploaded successfully" \
-        || echo "WARNING: bucket upload failed"
-elif [ "${_RAN_CHECKPOINT}" -eq 1 ]; then
-    echo "WARNING: bucket or bucket_path not set — checkpoint saved locally only"
+echo ""
+echo "--- Bucket upload ---"
+if [ "${_RAN_CHECKPOINT}" -eq 1 ]; then
+    if [ -n "${bucket_uri:-}" ] && [ -n "${_BPATH}" ]; then
+        echo "  Uploading: ${_CHECKPOINT_DIR}/"
+        echo "        → ${_DEST}/"
+        pw buckets cp -r "${_CHECKPOINT_DIR}/" "${_DEST}/" \
+            && echo "  Upload succeeded" \
+            || echo "  WARNING: upload failed (check pw CLI output above)"
+    else
+        echo "  WARNING: bucket_uri or bucket_path is empty — checkpoint kept locally"
+        echo "  bucket_uri : ${bucket_uri:-<empty>}"
+        echo "  bucket_path: ${bucket_path:-<empty>}"
+    fi
+else
+    echo "  No checkpoint to upload"
 fi
+
+echo ""
+echo "========================================================"
+echo "cancel.sh  finished: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo "========================================================"
 CANCEL_EOF
 chmod +x "${PW_PARENT_JOB_DIR}/cancel.sh"
 
 # ── Restart mode: restore from bucket checkpoint ─────────────────────────────
 if [ "${restart:-false}" = "true" ]; then
     echo "=== Restart mode: downloading checkpoint from bucket... ==="
-    _BPATH="${bucket_path%/}"
+    _BPATH="${bucket_path:-}"
+    _BPATH="${_BPATH#/}"
+    _BPATH="${_BPATH%/}"
+    _SRC="${bucket_uri}/${_BPATH}/checkpoints"
+
+    echo "Downloading from: ${_SRC}/"
     rm -rf "${CHECKPOINT_DIR}"
     mkdir -p "${CHECKPOINT_DIR}"
-    pw buckets cp -r "${bucket}:${_BPATH}/checkpoints/" "${CHECKPOINT_DIR}/"
+    pw buckets cp -r "${_SRC}/" "${CHECKPOINT_DIR}/"
 
     echo "=== Restoring mandelbrot from checkpoint... ==="
     bash "${DEMO_DIR}/03_checkpoint/restore.sh"

@@ -43,7 +43,7 @@ jobs:
           PATH=$HOME/pw:$PATH
 
           # Checkpoint / bucket settings
-          bucket="${{ inputs.bucket }}"
+          bucket_uri="${{ inputs.bucket.uri }}"
           bucket_path="${{ inputs.bucket_path }}"
           restart="${{ inputs.restart }}"
 
