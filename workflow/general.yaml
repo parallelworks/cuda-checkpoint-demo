@@ -37,6 +37,11 @@ jobs:
           basepath="/me/session/${PW_USER}/${{ sessions.session }}/"
           PATH=$HOME/pw:$PATH
 
+          # Checkpoint / bucket settings
+          bucket="${{ inputs.bucket }}"
+          bucket_path="${{ inputs.bucket_path }}"
+          restart="${{ inputs.restart }}"
+
           # Fractal parameters (passed through to controller.sh and start_service.sh)
           fractal_width="${{ inputs.fractal.width }}"
           fractal_height="${{ inputs.fractal.height }}"
@@ -87,6 +92,28 @@ jobs:
 'on':
   execute:
     inputs:
+
+      bucket:
+        label: Bucket
+        type: bucket
+        tooltip: Select the storage bucket used to store and retrieve checkpoints.
+
+      bucket_path:
+        label: Checkpoint Path in Bucket
+        type: string
+        tooltip: |
+          Path within the bucket where checkpoints are stored and retrieved.
+          Example: cuda-demo/run-01
+
+      restart:
+        label: Restart from Checkpoint?
+        type: boolean
+        default: false
+        tooltip: |
+          false → Start fresh computation (checkpoint is saved to bucket if the
+                  workflow is canceled before completion)
+          true  → Download checkpoint from bucket and resume computation from
+                  where it was saved
 
       cluster:
         type: group
