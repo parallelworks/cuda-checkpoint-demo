@@ -97,6 +97,19 @@ else
 fi
 
 echo ""
+echo "--- Kill mandelbrot ---"
+# Mandelbrot runs under setsid (its own process group) so kill -- -$$ in
+# the boilerplate cleanup does not reach it.  We must kill it explicitly.
+# If checkpoint.sh succeeded, criu already terminated the process; this is
+# a no-op in that case.
+if [ -n "${_PID}" ] && kill -0 "${_PID}" 2>/dev/null; then
+    echo "  Sending SIGTERM to mandelbrot (PID ${_PID})..."
+    kill "${_PID}" 2>/dev/null || true
+    sleep 1
+    kill -0 "${_PID}" 2>/dev/null && kill -9 "${_PID}" 2>/dev/null || true
+fi
+
+echo ""
 echo "========================================================"
 echo "cancel.sh  finished: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "========================================================"
@@ -122,7 +135,10 @@ if [ "${restart:-false}" = "true" ]; then
 else
     # ── Start mode: fresh computation ────────────────────────────────────────
     echo "=== Start mode: launching fresh mandelbrot computation... ==="
-    "${DEMO_DIR}/01_fractal/mandelbrot" \
+    # setsid puts mandelbrot in its own session/process group so that the
+    # SIGTERM the platform sends to this job's process group does NOT reach
+    # it.  cancel.sh can then checkpoint it safely and kills it explicitly.
+    setsid "${DEMO_DIR}/01_fractal/mandelbrot" \
         > "${SHARED_DIR}/mandelbrot.log" 2>&1 &
     FRACTAL_PID=$!
     echo "${FRACTAL_PID}" > "${SHARED_DIR}/pid.txt"
@@ -135,7 +151,10 @@ fi
 echo "Starting Flask dashboard on port ${service_port}..."
 (cd "${DEMO_DIR}/02_webserver" && PORT="${service_port}" python3 server.py)
 
-# ── Natural exit: disarm the cancel hook ──────────────────────────────────────
+# ── Natural exit: disarm the cancel hook and reap setsid'd mandelbrot ─────────
 # Flask exited normally (job finished or session closed after completion).
-# Computation is done; no point uploading a stale checkpoint.
 rm -f "${PW_PARENT_JOB_DIR}/cancel.sh"
+# Mandelbrot runs under setsid and won't be caught by kill -- -$$.  Kill it
+# if it is still alive (e.g. Flask was closed before computation finished).
+_MPID=$(cat "${SHARED_DIR}/pid.txt" 2>/dev/null | tr -d '[:space:]')
+[ -n "${_MPID}" ] && kill "${_MPID}" 2>/dev/null || true
