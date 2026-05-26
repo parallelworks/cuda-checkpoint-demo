@@ -8,6 +8,7 @@ and [CRIU](https://criu.org/).
 01_fractal/     CUDA Mandelbrot computation (long-running GPU job)
 02_webserver/   Flask dashboard — live progress and fractal preview
 03_checkpoint/  Scripts: freeze the job, snapshot to disk, restore/migrate
+workflow/       PW Activate workflow — run on a cloud cluster with cancel/restart
 ```
 
 ---
@@ -50,12 +51,16 @@ cuda-checkpoint-demo/
 │
 ├── 01_fractal/                  Component 1
 ├── 02_webserver/                Component 2
-└── 03_checkpoint/               Component 3
+├── 03_checkpoint/               Component 3
+└── workflow/                    PW Activate workflow
+    ├── general.yaml             Workflow definition (inputs, jobs, sessions)
+    ├── controller.sh            Login-node setup: compile binary, install deps
+    └── start_service.sh         Compute-node job: run fractal + Flask
 ```
 
 ---
 
-## Quick start
+## Quick start (local)
 
 ### Terminal 1 — start the computation
 
@@ -120,6 +125,107 @@ cd 03_checkpoint && ./restore.sh
 
 The `shared/` directory does **not** need to be copied — only `checkpoints/`
 contains the actual process snapshot.
+
+---
+
+## PW Activate workflow
+
+The `workflow/` directory contains a
+[PW Activate](https://docs.parallel.works) workflow that runs the demo on a
+cloud GPU cluster and supports **checkpoint-on-cancel** and **restart from
+checkpoint** via a cloud storage bucket.
+
+### Workflow inputs
+
+| Input | Type | Description |
+|-------|------|-------------|
+| Bucket | bucket | Cloud storage bucket for checkpoint files |
+| Checkpoint Path | string | Path within bucket (e.g. `cuda-demo/run-01`) |
+| Restart from Checkpoint? | boolean | `false` = fresh start, `true` = resume |
+| Cluster | group | Target resource, scheduler settings |
+| Fractal Settings | group | Resolution, iterations, zoom, sleep interval |
+
+Default fractal settings produce a ~10-minute run (4096×4096, 500 000 iterations,
+200 ms sleep/chunk) — long enough to cancel and checkpoint well before completion.
+
+### Start mode (`Restart = false`)
+
+1. `preprocessing` compiles the mandelbrot binary with the form parameters baked in
+   and installs Python dependencies on the login node.
+2. `session_runner` launches the job on the compute node:
+   - Mandelbrot starts in its own process group (`setsid`) so platform SIGTERM
+     does not reach it directly.
+   - Flask dashboard opens a browser session showing live progress.
+3. When the workflow is **canceled from the platform**, `cancel.sh` runs:
+   - Checkpoints the mandelbrot process (`cuda-checkpoint --toggle` + `criu dump`).
+   - Uploads the `checkpoints/` directory to the bucket.
+   - Terminates mandelbrot.
+
+### Restart mode (`Restart = true`)
+
+1. Same preprocessing step.
+2. On the compute node, before starting Flask:
+   - Downloads `checkpoints/` from the bucket.
+   - Restores the mandelbrot process (`criu restore` + `cuda-checkpoint --toggle`).
+3. Computation resumes from the saved progress; Flask shows the correct percentage.
+
+### Checkpoint files in the bucket
+
+```
+<bucket>/<bucket_path>/checkpoints/
+    *.img           CRIU images
+    metadata.json   { timestamp, hostname, pid_at_checkpoint, progress }
+    criu.log        CRIU dump/restore log
+```
+
+### cancel.log
+
+Every cancellation writes a detailed log to `<job_dir>/cancel.log`:
+
+```
+========================================================
+cancel.sh  started : 2026-05-26T15:37:07Z
+host               : my-gpu-node
+job dir            : /home/user/pw/jobs/aa/00051
+bucket URI         : pw://user/mybucket
+upload destination : pw://user/mybucket/cuda-demo/run-01/checkpoints
+========================================================
+
+--- Checkpoint ---
+  pid.txt PID : 12345
+  Process is running — checkpointing...
+  [checkpoint output]
+
+--- Bucket upload ---
+  Uploading: /home/user/cuda-checkpoint-demo/checkpoints/
+        → pw://user/mybucket/cuda-demo/run-01/checkpoints/
+  Upload succeeded
+
+--- Kill mandelbrot ---
+  Sending SIGTERM to mandelbrot (PID 12345)...
+========================================================
+cancel.sh  finished: 2026-05-26T15:37:23Z
+========================================================
+```
+
+### Implementation notes
+
+**PID tracking**: `setsid(1)` forks when the calling bash is a process group
+leader (the typical case for platform-launched jobs). In that case `$!` is the
+short-lived wrapper process, not the mandelbrot. The mandelbrot writes its own
+PID to `shared/pid.txt` at the very start of `main()` (before CUDA
+initialization), and `start_service.sh` waits for that file instead of trusting
+`$!`.
+
+**Process group isolation**: Mandelbrot runs under `setsid` so the SIGTERM the
+platform sends to the job's process group does not reach it. `cancel.sh` is
+therefore able to checkpoint a live CUDA process and only kills it explicitly
+after the checkpoint completes (or fails).
+
+**CUDA state polling**: `checkpoint.sh` polls `cuda-checkpoint --get-state`
+before attempting `--toggle`, waiting up to 30 s for the state to be `running`.
+This makes the CUDA state visible in `cancel.log` and handles edge cases where
+the driver is briefly in a transient state.
 
 ---
 
