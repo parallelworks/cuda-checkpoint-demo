@@ -229,6 +229,7 @@ static void write_output(int *h_result) {
 /* ── Main ────────────────────────────────────────────────────────────────────── */
 int main(void) {
     setup_paths();
+    write_pid();   /* write PID before CUDA init so cancel.sh always has the right PID */
 
     printf("=== CUDA Mandelbrot (cuda-checkpoint demo) ===\n");
     printf("  Image:      %d x %d  |  max_iter: %d  |  sleep: %d ms/chunk\n",

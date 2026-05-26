@@ -138,10 +138,31 @@ else
     # setsid puts mandelbrot in its own session/process group so that the
     # SIGTERM the platform sends to this job's process group does NOT reach
     # it.  cancel.sh can then checkpoint it safely and kills it explicitly.
+    #
+    # When bash is a process group leader (common in platform-launched jobs),
+    # setsid(1) forks before exec, so $! is the wrapper PID — not the mandelbrot.
+    # The mandelbrot writes its own PID to pid.txt immediately at startup (before
+    # CUDA init), so we wait for that file instead of trusting $!.
+    rm -f "${SHARED_DIR}/pid.txt"
     setsid "${DEMO_DIR}/01_fractal/mandelbrot" \
         > "${SHARED_DIR}/mandelbrot.log" 2>&1 &
-    FRACTAL_PID=$!
-    echo "${FRACTAL_PID}" > "${SHARED_DIR}/pid.txt"
+    SETSID_PID=$!
+    echo "setsid wrapper PID: ${SETSID_PID} (waiting for mandelbrot to write pid.txt...)"
+
+    # Wait up to 30s for the mandelbrot to write its actual PID
+    _W=0
+    while true; do
+        FRACTAL_PID=$(cat "${SHARED_DIR}/pid.txt" 2>/dev/null | tr -d '[:space:]')
+        if [ -n "${FRACTAL_PID}" ] && kill -0 "${FRACTAL_PID}" 2>/dev/null; then
+            break
+        fi
+        _W=$((_W + 1))
+        if [ ${_W} -ge 30 ]; then
+            echo "ERROR: mandelbrot did not write pid.txt within 30s"
+            exit 1
+        fi
+        sleep 1
+    done
     echo "Fractal PID: ${FRACTAL_PID}"
 fi
 
