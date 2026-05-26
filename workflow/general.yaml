@@ -23,6 +23,11 @@ jobs:
     ssh:
       remoteHost: ${{ inputs.cluster.resource.ip }}
     steps:
+      - name: Checkout
+        uses: parallelworks/checkout
+        with:
+          repo: git@github.com:parallelworks/cuda-checkpoint-demo.git
+          branch: dev
       - name: Create Inputs
         run: |
           set -x
