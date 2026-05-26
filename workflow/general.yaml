@@ -1,0 +1,204 @@
+# yaml-language-server: $schema=https://activate.parallel.works/workflow.schema.json
+#
+# cuda-checkpoint-demo — CUDA Mandelbrot + Web Dashboard
+#
+# Jobs:
+#   preprocessing   writes inputs.sh with PW vars + form values
+#   session_runner  subworkflow that:
+#                     - runs controller.sh on the login node (compiles binary, installs deps)
+#                     - submits start_service.sh as the actual job
+#                     - waits for the service port to be ready
+#                     - wires the PW session tunnel to Flask
+
+permissions:
+  - '*'
+
+sessions:
+  session:
+    useTLS: false
+    redirect: true
+
+jobs:
+  preprocessing:
+    ssh:
+      remoteHost: ${{ inputs.cluster.resource.ip }}
+    steps:
+      - name: Create Inputs
+        run: |
+          set -x
+
+          # PW platform variables (strip the API key)
+          env | grep '^PW_' | grep -v 'PW_API_KEY' > inputs.sh
+          # Wrap values in quotes
+          sed -i 's/=\(.*\)/="\1"/' inputs.sh
+
+          # Form inputs and derived variables
+          cat <<'EOF' >> inputs.sh
+          basepath="/me/session/${PW_USER}/${{ sessions.session }}/"
+          PATH=$HOME/pw:$PATH
+
+          # Fractal parameters (passed through to controller.sh and start_service.sh)
+          fractal_width="${{ inputs.fractal.width }}"
+          fractal_height="${{ inputs.fractal.height }}"
+          fractal_max_iter="${{ inputs.fractal.max_iter }}"
+          fractal_sleep_ms="${{ inputs.fractal.sleep_ms }}"
+          fractal_center_x="${{ inputs.fractal.center_x }}"
+          fractal_center_y="${{ inputs.fractal.center_y }}"
+          fractal_view_width="${{ inputs.fractal.view_width }}"
+          EOF
+
+          # Remove empty / undefined variables
+          sed -i '/=\s*$\|=undefined\s*$/d' inputs.sh
+          sed -i '/=""/d' inputs.sh
+          # Export everything
+          sed -i 's/^/export /' inputs.sh
+
+  session_runner:
+    needs:
+      - preprocessing
+    ssh:
+      remoteHost: ${{ inputs.cluster.resource.ip }}
+    steps:
+      - uses: github/parallelworks/interactive_session@main
+        early-cancel: any-job-failed
+        with:
+          $yaml: workflow/session_runner/v1.4/general.yaml
+          session: ${{ sessions.session }}
+          resource: ${{ inputs.cluster.resource }}
+          cluster:
+            scheduler: ${{ inputs.cluster.scheduler }}
+            slurm:
+              is_enabled: ${{ inputs.cluster.slurm.is_enabled }}
+              partition: ${{ inputs.cluster.slurm.partition }}
+              scheduler_directives: ${{ inputs.cluster.slurm.scheduler_directives }}
+              time: ${{ inputs.cluster.slurm.time }}
+            pbs:
+              is_enabled: ${{ inputs.cluster.pbs.is_enabled }}
+              scheduler_directives: ${{ inputs.cluster.pbs.scheduler_directives }}
+          service:
+            # controller.sh runs on the login node: compiles binary, installs Python deps
+            controller_script: ${HOME}/cuda-checkpoint-demo/workflow/controller.sh
+            # start_service.sh is the actual job: starts fractal + Flask
+            start_service_script: ${HOME}/cuda-checkpoint-demo/workflow/start_service.sh
+            inputs_sh: ${PW_PARENT_JOB_DIR}/inputs.sh
+            slug: "/"
+            rundir: ${PW_PARENT_JOB_DIR}
+
+'on':
+  execute:
+    inputs:
+
+      cluster:
+        type: group
+        label: Compute Cluster Settings
+        items:
+          resource:
+            type: compute-clusters
+            label: Service host
+            include-workspace: false
+            tooltip: Resource to host the computation and web dashboard
+            provider:
+              - gclusterv2
+              - pclusterv2
+              - azclusterv2
+              - aws-slurm
+              - google-slurm
+              - azure-slurm
+          scheduler:
+            type: boolean
+            default: false
+            label: Schedule Job?
+            hidden: ${{ inputs.cluster.resource.schedulerType == '' }}
+            ignore: ${{ .hidden }}
+            tooltip: |
+              Yes → Job is submitted to the scheduler using sbatch / qsub
+              No  → Job runs directly on the login node
+          slurm:
+            type: group
+            label: SLURM Directives
+            hidden: ${{ inputs.cluster.resource.schedulerType != 'slurm' || inputs.cluster.scheduler == false }}
+            ignore: ${{ inputs.cluster.resource.schedulerType != 'slurm' || inputs.cluster.scheduler == false }}
+            items:
+              is_enabled:
+                type: boolean
+                hidden: true
+                default: true
+                label: SLURM enabled
+              partition:
+                type: slurm-partitions
+                label: SLURM partition
+                optional: true
+                resource: ${{ inputs.cluster.resource }}
+              time:
+                label: Walltime
+                type: string
+                default: '04:00:00'
+                tooltip: Maximum wall-clock time for the job (HH:MM:SS)
+              scheduler_directives:
+                type: editor
+                optional: true
+                tooltip: |
+                  Extra SLURM directives, one per line.  Example:
+                  #SBATCH --gres=gpu:1
+                  #SBATCH --exclusive
+          pbs:
+            type: group
+            label: PBS Directives
+            hidden: ${{ inputs.cluster.resource.schedulerType != 'pbs' || inputs.cluster.scheduler == false }}
+            ignore: ${{ inputs.cluster.resource.schedulerType != 'pbs' || inputs.cluster.scheduler == false }}
+            items:
+              is_enabled:
+                type: boolean
+                hidden: true
+                default: true
+                label: PBS enabled
+              scheduler_directives:
+                label: Scheduler Directives
+                type: editor
+                tooltip: |
+                  Extra PBS directives, one per line.  Example:
+                  #PBS -l ngpus=1
+
+      fractal:
+        type: group
+        label: Fractal Settings
+        items:
+          width:
+            label: Image Width (pixels)
+            type: string
+            default: '4096'
+            tooltip: Horizontal pixel count. Doubling both dimensions → 4× GPU work.
+          height:
+            label: Image Height (pixels)
+            type: string
+            default: '4096'
+          max_iter:
+            label: Max Iterations
+            type: string
+            default: '100000'
+            tooltip: |
+              Higher values produce more detail and take longer.
+              10 000  → ~10 s  |  100 000 → ~2 min  |  500 000 → ~10 min
+          sleep_ms:
+            label: Sleep Between Chunks (ms)
+            type: string
+            default: '200'
+            tooltip: |
+              Artificial pause between row-chunks. Increases run time without
+              changing image quality. Set to 0 for maximum GPU speed.
+          center_x:
+            label: Center X (real axis)
+            type: string
+            default: '-0.5'
+            tooltip: Real part of the complex-plane centre. -0.5 shows the full classic set.
+          center_y:
+            label: Center Y (imaginary axis)
+            type: string
+            default: '0.0'
+          view_width:
+            label: View Width
+            type: string
+            default: '3.5'
+            tooltip: |
+              Width of the complex-plane window.
+              3.5 → full set  |  0.6 → Seahorse Valley  |  0.1 → deep zoom

@@ -1,0 +1,15 @@
+{
+  "status":      "complete",
+  "rows_done":   4096,
+  "total_rows":  4096,
+  "percent":     100.00,
+  "elapsed_sec": 123.1,
+  "eta_sec":     0.0,
+  "width":       4096,
+  "height":      4096,
+  "max_iter":    100000,
+  "sleep_ms":    200,
+  "center_x":    -0.50000000,
+  "center_y":    0.00000000,
+  "view_width":  3.500000
+}

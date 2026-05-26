@@ -1,0 +1,11 @@
+=== CUDA Mandelbrot (cuda-checkpoint demo) ===
+  Image:      4096 x 4096  |  max_iter: 100000  |  sleep: 200 ms/chunk
+  View:       center=(-0.50000, 0.00000)  width=3.50000
+  PID:        15901
+  Shared dir: /home/alvaro/cuda-checkpoint-demo/01_fractal/../shared/
+
+  [  0.2%]  row 8/4096  elapsed 0.0s  eta 0.2s     [  3.3%]  row 136/4096  elapsed 3.3s  eta 94.8s     [  6.4%]  row 264/4096  elapsed 6.5s  eta 94.5s     [  9.6%]  row 392/4096  elapsed 9.8s  eta 92.3s     [ 12.7%]  row 520/4096  elapsed 13.0s  eta 89.6s     [ 15.8%]  row 648/4096  elapsed 16.3s  eta 86.6s     [ 18.9%]  row 776/4096  elapsed 19.6s  eta 83.6s     [ 22.1%]  row 904/4096  elapsed 23.0s  eta 81.2s     [ 25.2%]  row 1032/4096  elapsed 26.6s  eta 78.9s     [ 28.3%]  row 1160/4096  elapsed 30.9s  eta 78.3s     [ 31.4%]  row 1288/4096  elapsed 35.3s  eta 77.0s     [ 34.6%]  row 1416/4096  elapsed 39.7s  eta 75.1s     [ 37.7%]  row 1544/4096  elapsed 44.1s  eta 72.8s     [ 40.8%]  row 1672/4096  elapsed 48.4s  eta 70.2s     [ 43.9%]  row 1800/4096  elapsed 52.8s  eta 67.4s     [ 47.1%]  row 1928/4096  elapsed 57.2s  eta 64.3s     [ 50.2%]  row 2056/4096  elapsed 61.6s  eta 61.1s     [ 53.3%]  row 2184/4096  elapsed 66.0s  eta 57.7s     [ 56.4%]  row 2312/4096  elapsed 70.3s  eta 54.3s     [ 59.6%]  row 2440/4096  elapsed 74.7s  eta 50.7s     [ 62.7%]  row 2568/4096  elapsed 79.1s  eta 47.0s     [ 65.8%]  row 2696/4096  elapsed 83.4s  eta 43.3s     [ 68.9%]  row 2824/4096  elapsed 87.8s  eta 39.6s     [ 72.1%]  row 2952/4096  elapsed 92.2s  eta 35.7s     [ 75.2%]  row 3080/4096  elapsed 96.6s  eta 31.9s     [ 78.3%]  row 3208/4096  elapsed 100.1s  eta 27.7s     [ 81.4%]  row 3336/4096  elapsed 103.5s  eta 23.6s     [ 84.6%]  row 3464/4096  elapsed 106.7s  eta 19.5s     [ 87.7%]  row 3592/4096  elapsed 110.0s  eta 15.4s     [ 90.8%]  row 3720/4096  elapsed 113.3s  eta 11.4s     [ 93.9%]  row 3848/4096  elapsed 116.5s  eta 7.5s     [ 97.1%]  row 3976/4096  elapsed 119.8s  eta 3.6s     [100.0%]  row 4096/4096  elapsed 122.8s  eta 0.0s   
+
+Saving full image…
+Full image written: /home/alvaro/cuda-checkpoint-demo/01_fractal/../shared/output.ppm
+Total time: 123.1 s
