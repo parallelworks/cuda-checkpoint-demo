@@ -70,35 +70,59 @@ fi
 echo ""
 echo "[1/3] Suspending CUDA state …"
 
-# Poll until CUDA state is 'running' (it may be 'checkpointed' if a prior toggle
-# left GPU state suspended, or temporarily unavailable during late init).
+# Strategy: attempt --toggle directly rather than polling --get-state first.
+#
+# Background: in some execution environments (e.g. platform-launched jobs)
+# --get-state consistently returns "initialization error" / "OS call failed"
+# even on a healthy running process, because the first failed query corrupts
+# the checkpoint channel.  Calling --toggle directly bypasses that failure
+# path and succeeds in those environments.
+#
+# Fallback logic:
+#   1. If CUDA state is already 'checkpointed' (prior attempt), resume first.
+#   2. Try --toggle up to WAIT_MAX times with 1 s sleep between attempts.
+#   3. On each attempt also check the process is still alive; exit early if dead.
+
 WAIT_MAX=30
 WAITED=0
 while true; do
+    # Liveness check — bail out early rather than poll for 30 s if the process
+    # was killed by the platform's cgroup cleanup between cancel.sh starting and
+    # this point.
+    if ! kill -0 "$PID" 2>/dev/null; then
+        echo "ERROR: Process $PID exited before CUDA could be suspended."
+        exit 1
+    fi
+
+    # Check current state (informational; do NOT block on errors from this call).
     CUDA_STATE=$("$CUDA_CKPT" --get-state --pid "$PID" 2>&1 || true)
     echo "      cuda-checkpoint --get-state --pid $PID → ${CUDA_STATE}"
-    if [[ "$CUDA_STATE" == "running" ]]; then
-        break
-    fi
-    # If already checkpointed from a prior failed attempt, resume first
+
+    # If already checkpointed from a prior failed attempt, resume first.
     if [[ "$CUDA_STATE" == "checkpointed" ]]; then
         echo "      State is 'checkpointed' — resuming before re-toggling..."
         "$CUDA_CKPT" --toggle --pid "$PID" 2>&1 || true
         sleep 1
         continue
     fi
+
+    # Attempt the toggle regardless of what --get-state reported.
+    # In healthy environments this is a no-op (we already know it's 'running').
+    # In environments where --get-state fails, this is the only path that works.
+    echo "      cuda-checkpoint --toggle --pid $PID"
+    if "$CUDA_CKPT" --toggle --pid "$PID" 2>&1; then
+        echo "      GPU memory copied to host; GPU resources released."
+        break
+    fi
+
     WAITED=$((WAITED + 1))
     if [[ $WAITED -ge $WAIT_MAX ]]; then
-        echo "ERROR: CUDA state never reached 'running' after ${WAIT_MAX}s (last: ${CUDA_STATE})"
+        echo "ERROR: Could not suspend CUDA after ${WAIT_MAX} attempts (last state: ${CUDA_STATE})"
         exit 1
     fi
-    echo "      Waiting for CUDA to be ready (${WAITED}/${WAIT_MAX}s) ..."
+    echo "      Toggle failed — retrying (${WAITED}/${WAIT_MAX}) ..."
     sleep 1
 done
-
-echo "      cuda-checkpoint --toggle --pid $PID"
-"$CUDA_CKPT" --toggle --pid "$PID"
-echo "      GPU memory copied to host; GPU resources released."
 
 STATE=$("$CUDA_CKPT" --get-state --pid "$PID" 2>&1 || true)
 echo "      State after toggle: $STATE"
