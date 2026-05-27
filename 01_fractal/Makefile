@@ -4,7 +4,7 @@ TARGET    := mandelbrot
 WIDTH     ?= 4096
 HEIGHT    ?= 4096
 MAX_ITER  ?= 100000
-SLEEP_MS  ?= 200
+SLEEP_MS  ?= 5000
 CENTER_X  ?= -0.5
 CENTER_Y  ?= 0.0
 VIEW_W    ?= 3.5
@@ -33,7 +33,7 @@ fast: $(TARGET)
 demo: override WIDTH=4096
 demo: override HEIGHT=4096
 demo: override MAX_ITER=100000
-demo: override SLEEP_MS=200
+demo: override SLEEP_MS=5000
 demo: override CENTER_X=-0.5
 demo: override CENTER_Y=0.0
 demo: override VIEW_W=3.5

@@ -23,6 +23,11 @@ jobs:
     ssh:
       remoteHost: ${{ inputs.cluster.resource.ip }}
     steps:
+      - name: Checkout
+        uses: parallelworks/checkout
+        with:
+          repo: git@github.com:parallelworks/cuda-checkpoint-demo.git
+          branch: dev
       - name: Create Inputs
         run: |
           set -x
@@ -36,6 +41,11 @@ jobs:
           cat <<'EOF' >> inputs.sh
           basepath="/me/session/${PW_USER}/${{ sessions.session }}/"
           PATH=$HOME/pw:$PATH
+
+          # Checkpoint / bucket settings
+          bucket_uri="${{ inputs.bucket.uri }}"
+          bucket_path="${{ inputs.bucket_path }}"
+          restart="${{ inputs.restart }}"
 
           # Fractal parameters (passed through to controller.sh and start_service.sh)
           fractal_width="${{ inputs.fractal.width }}"
@@ -77,9 +87,9 @@ jobs:
               scheduler_directives: ${{ inputs.cluster.pbs.scheduler_directives }}
           service:
             # controller.sh runs on the login node: compiles binary, installs Python deps
-            controller_script: ${HOME}/cuda-checkpoint-demo/workflow/controller.sh
+            controller_script: ${PW_PARENT_JOB_DIR}/workflow/controller.sh
             # start_service.sh is the actual job: starts fractal + Flask
-            start_service_script: ${HOME}/cuda-checkpoint-demo/workflow/start_service.sh
+            start_service_script: ${PW_PARENT_JOB_DIR}/workflow/start_service.sh
             inputs_sh: ${PW_PARENT_JOB_DIR}/inputs.sh
             slug: "/"
             rundir: ${PW_PARENT_JOB_DIR}
@@ -87,6 +97,28 @@ jobs:
 'on':
   execute:
     inputs:
+
+      bucket:
+        label: Bucket
+        type: bucket
+        tooltip: Select the storage bucket used to store and retrieve checkpoints.
+
+      bucket_path:
+        label: Checkpoint Path in Bucket
+        type: string
+        tooltip: |
+          Path within the bucket where checkpoints are stored and retrieved.
+          Example: cuda-demo/run-01
+
+      restart:
+        label: Restart from Checkpoint?
+        type: boolean
+        default: false
+        tooltip: |
+          false → Start fresh computation (checkpoint is saved to bucket if the
+                  workflow is canceled before completion)
+          true  → Download checkpoint from bucket and resume computation from
+                  where it was saved
 
       cluster:
         type: group
@@ -175,14 +207,15 @@ jobs:
           max_iter:
             label: Max Iterations
             type: string
-            default: '100000'
+            default: '500000'
             tooltip: |
               Higher values produce more detail and take longer.
-              10 000  → ~10 s  |  100 000 → ~2 min  |  500 000 → ~10 min
+              Estimates at default 5000 ms/chunk sleep (512 chunks):
+              10 000  → ~42 min  |  100 000 → ~42 min  |  500 000 → ~45 min
           sleep_ms:
             label: Sleep Between Chunks (ms)
             type: string
-            default: '200'
+            default: '5000'
             tooltip: |
               Artificial pause between row-chunks. Increases run time without
               changing image quality. Set to 0 for maximum GPU speed.

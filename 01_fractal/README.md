@@ -20,7 +20,7 @@ Resolution, iteration depth, and pacing are all configurable at build time.
 
 ```bash
 cd 01_fractal
-./run.sh               # uses defaults (4096×4096, 100k iter, 200ms sleep)
+./run.sh               # uses defaults (4096×4096, 100k iter, 5000ms sleep)
 ./run.sh --preset demo # explicit preset
 ```
 
@@ -33,9 +33,9 @@ the binary in the background.
 
 ```bash
 # Presets
-./run.sh --preset fast    # 2048×2048, 10k iter,  no sleep   (~10 s)
-./run.sh --preset demo    # 4096×4096, 100k iter, 200ms sleep (~2 min)
-./run.sh --preset long    # 8192×8192, 500k iter, no sleep   (~10 min)
+./run.sh --preset fast    # 2048×2048, 10k iter,  no sleep    (~10 s)
+./run.sh --preset demo    # 4096×4096, 100k iter, 5000ms sleep (~42 min)
+./run.sh --preset long    # 8192×8192, 500k iter, no sleep    (~10 min)
 
 # Manual flags (all optional, use defaults for anything omitted)
 ./run.sh --width 8192 --height 8192 --max-iter 500000 --sleep 0
@@ -52,10 +52,10 @@ the binary in the background.
 |-----------|---------|--------|
 | `WIDTH` / `HEIGHT` | 4096 | Image resolution — doubles both → 4× GPU work |
 | `MAX_ITER` | 100 000 | Max iterations per pixel — main quality/speed knob |
-| `SLEEP_MS` | 200 | Host sleep between row-chunks (ms) — controls pacing without changing GPU work |
+| `SLEEP_MS` | 5000 | Host sleep between row-chunks (ms) — controls pacing without changing GPU work |
 | `CHUNK_ROWS` | 8 | Rows per GPU kernel launch (hardcoded, edit source to change) |
-| `CENTER_X/Y` | Seahorse Valley | Fractal view centre (edit source) |
-| `VIEW_W` | 0.6 | Complex-plane window width (edit source) |
+| `CENTER_X/Y` | -0.5, 0.0 | Fractal view centre |
+| `VIEW_W` | 3.5 | Complex-plane window width (3.5 = full classic set) |
 
 **To run longer:** increase `--max-iter` or `--sleep`, or both.  
 **To get more detail:** increase `--width`/`--height` and `--max-iter` together.
@@ -82,8 +82,8 @@ All output lives under **`<project_root>/shared/`** — one directory above this
 ## Building manually
 
 ```bash
-make                                          # defaults
-make SLEEP_MS=1000                            # slower pacing
+make                                          # defaults (5000 ms sleep)
+make SLEEP_MS=0                               # maximum GPU speed
 make WIDTH=8192 HEIGHT=8192 MAX_ITER=500000   # high-res, no sleep
 ```
 

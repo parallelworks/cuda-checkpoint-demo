@@ -83,7 +83,7 @@ sudo criu restore \
     --images-dir  "$CHECKPOINTS_DIR" \
     --restore-detached \
     --log-file    criu-restore.log \
-    --log-level   4
+    -v4
 
 echo "      CRIU restore launched."
 
@@ -126,11 +126,15 @@ fi
 # ── Step 3: Resume CUDA state ─────────────────────────────────────────────────
 echo ""
 echo "[3/3] Resuming CUDA state …"
-echo "      cuda-checkpoint --toggle --pid $NEW_PID"
-"$CUDA_CKPT" --toggle --pid "$NEW_PID"
+# sudo is required here: criu restore runs as root, which leaves the CUDA
+# checkpoint channel in a state that only root can access via cuda-checkpoint.
+# The same binary works without sudo for a freshly launched process, but after
+# a CRIU restore the toggle must be run with elevated privileges.
+echo "      sudo cuda-checkpoint --toggle --pid $NEW_PID"
+sudo "$CUDA_CKPT" --toggle --pid "$NEW_PID"
 echo "      GPU memory restored; CUDA execution resumed."
 
-STATE=$("$CUDA_CKPT" --get-state --pid "$NEW_PID" 2>&1 || true)
+STATE=$(sudo "$CUDA_CKPT" --get-state --pid "$NEW_PID" 2>&1 || true)
 echo "      State after toggle: $STATE"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
