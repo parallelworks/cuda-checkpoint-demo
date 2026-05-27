@@ -16,7 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WIDTH=4096
 HEIGHT=4096
 MAX_ITER=100000
-SLEEP_MS=200
+SLEEP_MS=1000
 CENTER_X=-0.5
 CENTER_Y=0.0
 VIEW_W=3.5
@@ -49,7 +49,7 @@ case "$PRESET" in
         CENTER_X=-0.5; CENTER_Y=0.0; VIEW_W=3.5
         ;;
     demo)
-        WIDTH=4096;  HEIGHT=4096;  MAX_ITER=100000;  SLEEP_MS=200
+        WIDTH=4096;  HEIGHT=4096;  MAX_ITER=100000;  SLEEP_MS=1000
         CENTER_X=-0.5; CENTER_Y=0.0; VIEW_W=3.5
         ;;
     long)

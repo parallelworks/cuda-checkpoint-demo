@@ -66,7 +66,7 @@ cuda-checkpoint-demo/
 
 ```bash
 cd 01_fractal
-./run.sh --preset demo      # 4096×4096, ~2 min
+./run.sh --preset demo      # 4096×4096, ~9 min
 ```
 
 Presets:
@@ -74,7 +74,7 @@ Presets:
 | Preset | Resolution | Max iter | Sleep | Duration |
 |--------|-----------|----------|-------|---------|
 | `fast` | 2048×2048 | 10 000 | none | ~10 s |
-| `demo` | 4096×4096 | 100 000 | 200 ms/chunk | ~2 min |
+| `demo` | 4096×4096 | 100 000 | 1000 ms/chunk | ~9 min |
 | `long` | 8192×8192 | 500 000 | none | ~10 min |
 
 Or set parameters explicitly:
@@ -145,8 +145,8 @@ checkpoint** via a cloud storage bucket.
 | Cluster | group | Target resource, scheduler settings |
 | Fractal Settings | group | Resolution, iterations, zoom, sleep interval |
 
-Default fractal settings produce a ~10-minute run (4096×4096, 500 000 iterations,
-200 ms sleep/chunk) — long enough to cancel and checkpoint well before completion.
+Default fractal settings produce a ~15-minute run (4096×4096, 500 000 iterations,
+1000 ms sleep/chunk) — long enough to cancel and checkpoint well before completion.
 
 ### Start mode (`Restart = false`)
 
@@ -188,7 +188,7 @@ cancel.sh  started : 2026-05-26T15:37:07Z
 host               : my-gpu-node
 job dir            : /home/user/pw/jobs/aa/00051
 bucket URI         : pw://user/mybucket
-upload destination : pw://user/mybucket/cuda-demo/run-01/checkpoints
+upload destination : pw://user/mybucket/cuda-demo/run-01
 ========================================================
 
 --- Checkpoint ---
@@ -197,12 +197,12 @@ upload destination : pw://user/mybucket/cuda-demo/run-01/checkpoints
   [checkpoint output]
 
 --- Bucket upload ---
-  Uploading: /home/user/cuda-checkpoint-demo/checkpoints/
-        → pw://user/mybucket/cuda-demo/run-01/checkpoints/
+  Uploading: /home/user/.../checkpoints/
+        → pw://user/mybucket/cuda-demo/run-01/
   Upload succeeded
 
 --- Kill mandelbrot ---
-  Sending SIGTERM to mandelbrot (PID 12345)...
+  Sending SIGKILL to mandelbrot (PID 12345)...
 ========================================================
 cancel.sh  finished: 2026-05-26T15:37:23Z
 ========================================================
@@ -217,15 +217,22 @@ PID to `shared/pid.txt` at the very start of `main()` (before CUDA
 initialization), and `start_service.sh` waits for that file instead of trusting
 `$!`.
 
-**Process group isolation**: Mandelbrot runs under `setsid` so the SIGTERM the
-platform sends to the job's process group does not reach it. `cancel.sh` is
-therefore able to checkpoint a live CUDA process and only kills it explicitly
-after the checkpoint completes (or fails).
+**Signal protection (two layers)**: Mandelbrot is launched via
+`setsid bash -c "trap '' TERM HUP; exec ./mandelbrot"`.
+*Layer 1 — `setsid`*: creates a new POSIX session and process group so the
+platform's `kill -- -$$` (targeting the job's PGID) does not reach it.
+*Layer 2 — `trap '' TERM HUP`*: sets SIGTERM and SIGHUP to `SIG_IGN` before
+`exec`. POSIX guarantees `SIG_IGN` is preserved across `exec()`, so the
+mandelbrot inherits it and survives even a cgroup-wide SIGTERM broadcast.
+`cancel.sh` checkpoints the live CUDA process first, then kills it with
+SIGKILL (which cannot be ignored) once the checkpoint is saved (or fails).
 
-**CUDA state polling**: `checkpoint.sh` polls `cuda-checkpoint --get-state`
-before attempting `--toggle`, waiting up to 30 s for the state to be `running`.
-This makes the CUDA state visible in `cancel.log` and handles edge cases where
-the driver is briefly in a transient state.
+**CUDA checkpoint strategy**: `checkpoint.sh` calls `cuda-checkpoint --toggle`
+directly rather than polling `--get-state` first. Polling `--get-state` in
+some platform environments corrupts the checkpoint channel on the first call,
+causing all subsequent `--toggle` attempts to fail. Calling `--toggle` directly
+bypasses that failure path. A `kill -0` liveness check before each attempt
+lets the script exit early if the process has already been terminated.
 
 ---
 
