@@ -21,7 +21,7 @@
 
 set -x
 
-DEMO_DIR="${HOME}/cuda-checkpoint-demo"
+DEMO_DIR="${PW_PARENT_JOB_DIR}"
 CHECKPOINT_DIR="${DEMO_DIR}/checkpoints"
 SHARED_DIR="${DEMO_DIR}/shared"
 
@@ -40,7 +40,7 @@ set -x
 _LOG="${PW_PARENT_JOB_DIR}/cancel.log"
 exec > >(tee -a "${_LOG}") 2>&1
 
-_DEMO_DIR="${HOME}/cuda-checkpoint-demo"
+_DEMO_DIR="${PW_PARENT_JOB_DIR}"
 _SHARED_DIR="${_DEMO_DIR}/shared"
 _CHECKPOINT_DIR="${_DEMO_DIR}/checkpoints"
 

@@ -10,7 +10,7 @@
 
 set -x
 
-DEMO_DIR="${HOME}/cuda-checkpoint-demo"
+DEMO_DIR="${PW_PARENT_JOB_DIR}"
 
 # ── 1. Compile mandelbrot ─────────────────────────────────────────────────────
 echo "Compiling mandelbrot binary..."

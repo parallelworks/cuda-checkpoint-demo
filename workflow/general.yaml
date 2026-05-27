@@ -87,9 +87,9 @@ jobs:
               scheduler_directives: ${{ inputs.cluster.pbs.scheduler_directives }}
           service:
             # controller.sh runs on the login node: compiles binary, installs Python deps
-            controller_script: ${HOME}/cuda-checkpoint-demo/workflow/controller.sh
+            controller_script: ${PW_PARENT_JOB_DIR}/workflow/controller.sh
             # start_service.sh is the actual job: starts fractal + Flask
-            start_service_script: ${HOME}/cuda-checkpoint-demo/workflow/start_service.sh
+            start_service_script: ${PW_PARENT_JOB_DIR}/workflow/start_service.sh
             inputs_sh: ${PW_PARENT_JOB_DIR}/inputs.sh
             slug: "/"
             rundir: ${PW_PARENT_JOB_DIR}
