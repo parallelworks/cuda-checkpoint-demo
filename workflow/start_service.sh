@@ -49,7 +49,10 @@ _BPATH="${bucket_path:-}"
 _BPATH="${_BPATH#/}"
 _BPATH="${_BPATH%/}"
 
-_DEST="${bucket_uri}/${_BPATH}/checkpoints"
+# pw buckets cp -r always creates a subdirectory named after the source's
+# last path component inside the destination.  Upload one level above so
+# the tool creates   <bucket>/<path>/checkpoints/   in the bucket.
+_DEST="${bucket_uri}/${_BPATH}"
 
 echo "========================================================"
 echo "cancel.sh  started : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -125,9 +128,12 @@ if [ "${restart:-false}" = "true" ]; then
     _SRC="${bucket_uri}/${_BPATH}/checkpoints"
 
     echo "Downloading from: ${_SRC}/"
+    # pw buckets cp -r creates a subdirectory named after the source's last
+    # component.  Download to the parent of CHECKPOINT_DIR so the tool
+    # re-creates   <job>/checkpoints/   with the images inside it.
     rm -rf "${CHECKPOINT_DIR}"
-    mkdir -p "${CHECKPOINT_DIR}"
-    pw buckets cp -r "${_SRC}/" "${CHECKPOINT_DIR}/"
+    mkdir -p "${DEMO_DIR}"
+    pw buckets cp -r "${_SRC}/" "${DEMO_DIR}/"
 
     echo "=== Restoring mandelbrot from checkpoint... ==="
     bash "${DEMO_DIR}/03_checkpoint/restore.sh"

@@ -115,7 +115,7 @@ CRIU_FLAGS=(
     --images-dir "$CHECKPOINTS_DIR"
     --tree        "$PID"
     --log-file    criu.log
-    --log-level   4
+    -v4
 )
 if [[ $LEAVE_RUNNING -eq 1 ]]; then
     CRIU_FLAGS+=(--leave-running)
@@ -123,6 +123,8 @@ if [[ $LEAVE_RUNNING -eq 1 ]]; then
 fi
 
 sudo criu dump "${CRIU_FLAGS[@]}"
+# Make all checkpoint files readable by the regular user so pw buckets cp can upload them
+sudo chmod -R a+r "${CHECKPOINTS_DIR}"
 echo "      CRIU dump complete."
 
 # ── Step 3: Save human-readable metadata ─────────────────────────────────────

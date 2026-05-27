@@ -83,7 +83,7 @@ sudo criu restore \
     --images-dir  "$CHECKPOINTS_DIR" \
     --restore-detached \
     --log-file    criu-restore.log \
-    --log-level   4
+    -v4
 
 echo "      CRIU restore launched."
 
