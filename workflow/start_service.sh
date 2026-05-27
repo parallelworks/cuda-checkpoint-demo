@@ -101,15 +101,13 @@ fi
 
 echo ""
 echo "--- Kill mandelbrot ---"
-# Mandelbrot runs under setsid (its own process group) so kill -- -$$ in
-# the boilerplate cleanup does not reach it.  We must kill it explicitly.
-# If checkpoint.sh succeeded, criu already terminated the process; this is
-# a no-op in that case.
+# Mandelbrot ignores SIGTERM (SIG_IGN set by its setsid bash wrapper) so
+# kill -- -$$ and plain SIGTERM do nothing to it.  We must kill it
+# explicitly with SIGKILL.  If checkpoint.sh succeeded, criu already
+# terminated the process; this is a no-op in that case.
 if [ -n "${_PID}" ] && kill -0 "${_PID}" 2>/dev/null; then
-    echo "  Sending SIGTERM to mandelbrot (PID ${_PID})..."
-    kill "${_PID}" 2>/dev/null || true
-    sleep 1
-    kill -0 "${_PID}" 2>/dev/null && kill -9 "${_PID}" 2>/dev/null || true
+    echo "  Sending SIGKILL to mandelbrot (PID ${_PID})..."
+    kill -9 "${_PID}" 2>/dev/null || true
 fi
 
 echo ""
@@ -141,16 +139,27 @@ if [ "${restart:-false}" = "true" ]; then
 else
     # ── Start mode: fresh computation ────────────────────────────────────────
     echo "=== Start mode: launching fresh mandelbrot computation... ==="
-    # setsid puts mandelbrot in its own session/process group so that the
-    # SIGTERM the platform sends to this job's process group does NOT reach
-    # it.  cancel.sh can then checkpoint it safely and kills it explicitly.
+    # Two layers of signal protection so the platform's cgroup-wide SIGTERM
+    # cannot kill mandelbrot before cancel.sh gets to checkpoint it:
     #
-    # When bash is a process group leader (common in platform-launched jobs),
-    # setsid(1) forks before exec, so $! is the wrapper PID — not the mandelbrot.
-    # The mandelbrot writes its own PID to pid.txt immediately at startup (before
-    # CUDA init), so we wait for that file instead of trusting $!.
+    #   1. setsid  — new POSIX session, own process group; the platform's
+    #               "kill -- -$$" targeting this job's PGID doesn't reach it.
+    #
+    #   2. trap '' TERM HUP inside the bash wrapper — sets SIGTERM/SIGHUP to
+    #               SIG_IGN.  POSIX guarantees SIG_IGN is preserved across
+    #               exec(), so the mandelbrot inherits it and cannot be killed
+    #               by SIGTERM even when the platform broadcasts to the whole
+    #               session cgroup (which setsid alone doesn't protect against).
+    #
+    # After a successful checkpoint criu terminates the process itself.
+    # If checkpoint failed, cancel.sh kills with SIGKILL (cannot be ignored).
+    #
+    # When bash is a process group leader, setsid(1) forks before exec, so
+    # $! is the wrapper PID — not the mandelbrot.  The mandelbrot writes its
+    # own PID to pid.txt immediately at startup (before CUDA init), so we
+    # wait for that file instead of trusting $!.
     rm -f "${SHARED_DIR}/pid.txt"
-    setsid "${DEMO_DIR}/01_fractal/mandelbrot" \
+    setsid bash -c "trap '' TERM HUP; exec '${DEMO_DIR}/01_fractal/mandelbrot'" \
         > "${SHARED_DIR}/mandelbrot.log" 2>&1 &
     SETSID_PID=$!
     echo "setsid wrapper PID: ${SETSID_PID} (waiting for mandelbrot to write pid.txt...)"
@@ -181,7 +190,8 @@ echo "Starting Flask dashboard on port ${service_port}..."
 # ── Natural exit: disarm the cancel hook and reap setsid'd mandelbrot ─────────
 # Flask exited normally (job finished or session closed after completion).
 rm -f "${PW_PARENT_JOB_DIR}/cancel.sh"
-# Mandelbrot runs under setsid and won't be caught by kill -- -$$.  Kill it
+# Mandelbrot runs under setsid with SIGTERM ignored — won't be caught by
+# kill -- -$$ and won't respond to SIGTERM.  Use SIGKILL to terminate it
 # if it is still alive (e.g. Flask was closed before computation finished).
 _MPID=$(cat "${SHARED_DIR}/pid.txt" 2>/dev/null | tr -d '[:space:]')
-[ -n "${_MPID}" ] && kill "${_MPID}" 2>/dev/null || true
+[ -n "${_MPID}" ] && kill -9 "${_MPID}" 2>/dev/null || true
