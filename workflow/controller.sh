@@ -20,7 +20,7 @@ make -B \
     WIDTH="${fractal_width:-4096}" \
     HEIGHT="${fractal_height:-4096}" \
     MAX_ITER="${fractal_max_iter:-100000}" \
-    SLEEP_MS="${fractal_sleep_ms:-200}" \
+    SLEEP_MS="${fractal_sleep_ms:-5000}" \
     CENTER_X="${fractal_center_x:--0.5}" \
     CENTER_Y="${fractal_center_y:-0.0}" \
     VIEW_W="${fractal_view_width:-3.5}"

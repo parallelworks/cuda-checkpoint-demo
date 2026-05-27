@@ -66,7 +66,7 @@ cuda-checkpoint-demo/
 
 ```bash
 cd 01_fractal
-./run.sh --preset demo      # 4096×4096, ~9 min
+./run.sh --preset demo      # 4096×4096, ~42 min
 ```
 
 Presets:
@@ -74,7 +74,7 @@ Presets:
 | Preset | Resolution | Max iter | Sleep | Duration |
 |--------|-----------|----------|-------|---------|
 | `fast` | 2048×2048 | 10 000 | none | ~10 s |
-| `demo` | 4096×4096 | 100 000 | 1000 ms/chunk | ~9 min |
+| `demo` | 4096×4096 | 100 000 | 5000 ms/chunk | ~42 min |
 | `long` | 8192×8192 | 500 000 | none | ~10 min |
 
 Or set parameters explicitly:
@@ -145,8 +145,8 @@ checkpoint** via a cloud storage bucket.
 | Cluster | group | Target resource, scheduler settings |
 | Fractal Settings | group | Resolution, iterations, zoom, sleep interval |
 
-Default fractal settings produce a ~15-minute run (4096×4096, 500 000 iterations,
-1000 ms sleep/chunk) — long enough to cancel and checkpoint well before completion.
+Default fractal settings produce a ~45-minute run (4096×4096, 500 000 iterations,
+5000 ms sleep/chunk) — long enough to cancel and checkpoint well before completion.
 
 ### Start mode (`Restart = false`)
 
