@@ -210,6 +210,17 @@ cancel.sh  finished: 2026-05-26T15:37:23Z
 
 ### Implementation notes
 
+**Fixed work directory**: Every workflow job operates out of
+`~/cuda-checkpoint-work` (set up by `controller.sh`) rather than the
+job-specific `PW_PARENT_JOB_DIR`. This is required for multi-cycle
+cancel → restart to work: CRIU records the **absolute binary path** into the
+checkpoint image, and the restored process writes `pid.txt` / `progress.json`
+to the `shared/` directory relative to that same path. If the path changes
+between jobs (each PW job lands in `jobs/aa/NNNNN`) the binary is no longer
+found on restore, and `cancel.sh` can't locate `pid.txt` — silently skipping
+the checkpoint on every restart. Using a fixed path eliminates both problems
+and allows unlimited cancel → restart cycles against the same bucket path.
+
 **PID tracking**: `setsid(1)` forks when the calling bash is a process group
 leader (the typical case for platform-launched jobs). In that case `$!` is the
 short-lived wrapper process, not the mandelbrot. The mandelbrot writes its own

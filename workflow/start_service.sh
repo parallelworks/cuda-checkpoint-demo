@@ -21,9 +21,16 @@
 
 set -x
 
-DEMO_DIR="${PW_PARENT_JOB_DIR}"
+# Use the fixed work directory so CRIU restore always finds the binary at the
+# same absolute path across multiple cancel → restart cycles.
+# controller.sh has already populated this directory and compiled the binary.
+DEMO_DIR="${HOME}/cuda-checkpoint-work"
 CHECKPOINT_DIR="${DEMO_DIR}/checkpoints"
 SHARED_DIR="${DEMO_DIR}/shared"
+
+# Export so cancel.sh (launched by the boilerplate's cleanup() trap) can find
+# the work directory even though it runs in a subprocess.
+export DEMO_WORK_DIR="${DEMO_DIR}"
 
 mkdir -p "${SHARED_DIR}"
 
@@ -40,7 +47,7 @@ set -x
 _LOG="${PW_PARENT_JOB_DIR}/cancel.log"
 exec > >(tee -a "${_LOG}") 2>&1
 
-_DEMO_DIR="${PW_PARENT_JOB_DIR}"
+_DEMO_DIR="${DEMO_WORK_DIR}"
 _SHARED_DIR="${_DEMO_DIR}/shared"
 _CHECKPOINT_DIR="${_DEMO_DIR}/checkpoints"
 
