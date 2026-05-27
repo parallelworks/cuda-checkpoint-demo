@@ -132,16 +132,19 @@ if [ "${restart:-false}" = "true" ]; then
     _BPATH="${_BPATH%/}"
     _SRC="${bucket_uri}/${_BPATH}/checkpoints"
 
-    echo "Downloading from: ${_SRC}/"
-    # pw buckets cp -r creates a subdirectory named after the source's last
-    # component.  Download to the parent of CHECKPOINT_DIR so the tool
-    # re-creates   <job>/checkpoints/   with the images inside it.
+    echo "Downloading from: ${_SRC}"
+    # pw buckets cp -r SOURCE (no trailing slash) DEST/ creates a subdirectory
+    # named after the source's last path component inside DEST.
+    # With a trailing slash on the source the tool copies the CONTENTS directly
+    # into DEST — so the .img files land in WORK_DIR root, not checkpoints/.
+    # Always omit the trailing slash from the source URL.
     rm -rf "${CHECKPOINT_DIR}"
     mkdir -p "${DEMO_DIR}"
-    pw buckets cp -r "${_SRC}/" "${DEMO_DIR}/"
+    pw buckets cp -r "${_SRC}" "${DEMO_DIR}/"
 
     echo "=== Restoring mandelbrot from checkpoint... ==="
-    bash "${DEMO_DIR}/03_checkpoint/restore.sh"
+    bash "${DEMO_DIR}/03_checkpoint/restore.sh" \
+        || { echo "ERROR: restore.sh failed — aborting job"; exit 1; }
     echo "Mandelbrot restored and running"
 else
     # ── Start mode: fresh computation ────────────────────────────────────────
