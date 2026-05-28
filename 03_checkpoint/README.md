@@ -25,7 +25,7 @@ cuda-checkpoint --toggle --pid $PID
     → copies device memory to host RAM
     → releases GPU resources
 
-sudo criu dump --images-dir ../checkpoints --tree $PID
+criu dump --images-dir ../checkpoints --tree $PID --unprivileged
     → snapshots CPU registers, virtual memory, file descriptors
     → terminates the process
 ```
@@ -33,7 +33,7 @@ sudo criu dump --images-dir ../checkpoints --tree $PID
 ### Restore sequence
 
 ```
-sudo criu restore --images-dir ../checkpoints --restore-detached
+criu restore --images-dir ../checkpoints --restore-detached --unprivileged
     → recreates the process from the snapshot
     → process resumes from its last instruction
     → immediately blocks at its next CUDA call (GPU still suspended)
@@ -108,11 +108,19 @@ cd 03_checkpoint && ./restore.sh
 
 ---
 
-## Note on sudo
+## Prerequisites (one-time admin setup)
 
-`criu dump` and `criu restore` require elevated privileges to access
-`/proc/<pid>/mem` and restore kernel state.  Only those two CRIU calls
-use `sudo`; `cuda-checkpoint` runs as the regular user.
+CRIU requires the `cap_checkpoint_restore` capability to run without root:
+
+```bash
+sudo setcap cap_checkpoint_restore+eip $(which criu)
+# Verify:
+getcap $(which criu)
+# Expected: /usr/sbin/criu cap_checkpoint_restore=eip
+```
+
+This is done once per machine by an administrator. After that, `criu dump`
+and `criu restore` run as the regular user with no `sudo` required.
 
 ---
 
