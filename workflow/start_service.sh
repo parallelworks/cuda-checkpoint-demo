@@ -152,7 +152,8 @@ if [ "${restart:-false}" = "true" ]; then
     # Always omit the trailing slash from the source URL.
     rm -rf "${CHECKPOINT_DIR}"
     mkdir -p "${DEMO_DIR}"
-    pw buckets cp -r "${_SRC}" "${DEMO_DIR}/"
+    pw buckets cp -r "${_SRC}" "${DEMO_DIR}/" \
+        || { echo "ERROR: checkpoint download failed from ${_SRC} — aborting job"; exit 1; }
 
     echo "=== Restoring mandelbrot from checkpoint... ==="
     bash "${DEMO_DIR}/03_checkpoint/restore.sh" \
