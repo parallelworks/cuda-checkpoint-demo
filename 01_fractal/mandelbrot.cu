@@ -54,7 +54,7 @@
 #define CHUNK_ROWS    8   /* rows computed per GPU kernel launch               */
 #define PREVIEW_W   512   /* preview image dimensions                          */
 #define PREVIEW_H   512
-#define PREVIEW_EVERY 4   /* write preview every N chunks                      */
+#define PREVIEW_EVERY 1   /* write preview every N chunks                      */
 
 /* ── View (overridable with -DCENTER_X=... etc.) ────────────────────────────── */
 #ifndef CENTER_X

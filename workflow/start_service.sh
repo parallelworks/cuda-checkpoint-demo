@@ -180,6 +180,10 @@ if [ "${restart:-false}" = "true" ]; then
 else
     # ── Start mode: fresh computation ────────────────────────────────────────
     echo "=== Start mode: launching fresh mandelbrot computation... ==="
+    # Kill any leftover mandelbrot from a previous job or test session that may
+    # still be writing to the shared work directory.
+    pkill -KILL -f "${DEMO_DIR}/01_fractal/mandelbrot" 2>/dev/null || true
+    sleep 1
     # Two layers of signal protection so the platform's cgroup-wide SIGTERM
     # cannot kill mandelbrot before cancel.sh gets to checkpoint it:
     #
