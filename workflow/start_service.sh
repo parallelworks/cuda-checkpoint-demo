@@ -104,9 +104,9 @@ echo ""
 echo "--- Bucket upload ---"
 if [ "${_RAN_CHECKPOINT}" -eq 1 ]; then
     if [ -n "${bucket_uri:-}" ] && [ -n "${_BPATH}" ]; then
-        echo "  Uploading: ${_CHECKPOINT_DIR}/"
-        echo "        → ${_DEST}/"
-        pw buckets cp -r "${_CHECKPOINT_DIR}/" "${_DEST}/" \
+        echo "  Uploading: ${_CHECKPOINT_DIR}"
+        echo "        → ${_DEST}/checkpoints/"
+        pw buckets cp -r "${_CHECKPOINT_DIR}" "${_DEST}/" \
             && echo "  Upload succeeded" \
             || echo "  WARNING: upload failed (check pw CLI output above)"
     else
