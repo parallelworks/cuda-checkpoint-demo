@@ -27,7 +27,7 @@ jobs:
         uses: parallelworks/checkout
         with:
           repo: https://github.com/parallelworks/cuda-checkpoint-demo.git
-          branch: dev
+          branch: main
       - name: Create Inputs
         run: |
           set -x
