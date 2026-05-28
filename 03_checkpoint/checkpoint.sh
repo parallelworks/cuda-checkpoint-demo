@@ -22,8 +22,9 @@
 #   ./checkpoint.sh               checkpoint and terminate the process
 #   ./checkpoint.sh --live        checkpoint but leave process running (live migration)
 #
-# NOTE: criu dump requires elevated privileges.  This script uses sudo for that
-#       step only.  cuda-checkpoint runs as the regular user.
+# PREREQUISITES (one-time admin setup):
+#   CRIU requires the cap_checkpoint_restore capability to run without root:
+#     sudo setcap cap_checkpoint_restore+eip $(which criu)
 
 set -euo pipefail
 
@@ -47,6 +48,22 @@ echo "    $CHECKPOINTS_DIR/"
 echo ""
 
 # ── Pre-flight checks ─────────────────────────────────────────────────────────
+_CRIU_BIN=$(command -v criu 2>/dev/null)
+if [[ -z "$_CRIU_BIN" ]]; then
+    echo "ERROR: criu not found in PATH. Install CRIU first."
+    exit 1
+fi
+_CRIU_CAPS=$(getcap "$_CRIU_BIN" 2>/dev/null || echo "")
+if ! echo "$_CRIU_CAPS" | grep -qE "cap_checkpoint_restore|cap_sys_admin"; then
+    echo "ERROR: CRIU is not configured for non-root operation."
+    echo ""
+    echo "  Ask your system administrator to run once:"
+    echo "    sudo setcap cap_checkpoint_restore+eip $_CRIU_BIN"
+    echo ""
+    echo "  Then verify with: getcap $_CRIU_BIN"
+    exit 1
+fi
+
 if [[ ! -f "$PID_FILE" ]]; then
     echo "ERROR: $PID_FILE not found."
     echo "Is the Mandelbrot computation running?  Start it with:"
@@ -129,26 +146,25 @@ echo "      State after toggle: $STATE"
 
 # ── Step 2: Dump process with CRIU ───────────────────────────────────────────
 echo ""
-echo "[2/3] Dumping process with CRIU (requires sudo) …"
+echo "[2/3] Dumping process with CRIU …"
 
 # Clear old checkpoint images so restore always uses a fresh dump
 rm -rf "$CHECKPOINTS_DIR"
 mkdir -p "$CHECKPOINTS_DIR"
 
 CRIU_FLAGS=(
-    --images-dir "$CHECKPOINTS_DIR"
-    --tree        "$PID"
-    --log-file    criu.log
+    --images-dir   "$CHECKPOINTS_DIR"
+    --tree         "$PID"
+    --log-file     criu.log
     -v4
+    --unprivileged
 )
 if [[ $LEAVE_RUNNING -eq 1 ]]; then
     CRIU_FLAGS+=(--leave-running)
     echo "      Mode: --live  (process keeps running after checkpoint)"
 fi
 
-sudo criu dump "${CRIU_FLAGS[@]}"
-# Make all checkpoint files readable by the regular user so pw buckets cp can upload them
-sudo chmod -R a+r "${CHECKPOINTS_DIR}"
+criu dump "${CRIU_FLAGS[@]}"
 echo "      CRIU dump complete."
 
 # ── Step 3: Save human-readable metadata ─────────────────────────────────────

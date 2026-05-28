@@ -104,9 +104,9 @@ echo ""
 echo "--- Bucket upload ---"
 if [ "${_RAN_CHECKPOINT}" -eq 1 ]; then
     if [ -n "${bucket_uri:-}" ] && [ -n "${_BPATH}" ]; then
-        echo "  Uploading: ${_CHECKPOINT_DIR}/"
-        echo "        → ${_DEST}/"
-        pw buckets cp -r "${_CHECKPOINT_DIR}/" "${_DEST}/" \
+        echo "  Uploading: ${_CHECKPOINT_DIR}"
+        echo "        → ${_DEST}/checkpoints/"
+        pw buckets cp -r "${_CHECKPOINT_DIR}" "${_DEST}/" \
             && echo "  Upload succeeded" \
             || echo "  WARNING: upload failed (check pw CLI output above)"
     else
@@ -152,7 +152,8 @@ if [ "${restart:-false}" = "true" ]; then
     # Always omit the trailing slash from the source URL.
     rm -rf "${CHECKPOINT_DIR}"
     mkdir -p "${DEMO_DIR}"
-    pw buckets cp -r "${_SRC}" "${DEMO_DIR}/"
+    pw buckets cp -r "${_SRC}" "${DEMO_DIR}/" \
+        || { echo "ERROR: checkpoint download failed from ${_SRC} — aborting job"; exit 1; }
 
     echo "=== Restoring mandelbrot from checkpoint... ==="
     bash "${DEMO_DIR}/03_checkpoint/restore.sh" \
@@ -179,6 +180,10 @@ if [ "${restart:-false}" = "true" ]; then
 else
     # ── Start mode: fresh computation ────────────────────────────────────────
     echo "=== Start mode: launching fresh mandelbrot computation... ==="
+    # Kill any leftover mandelbrot from a previous job or test session that may
+    # still be writing to the shared work directory.
+    pkill -KILL -f "${DEMO_DIR}/01_fractal/mandelbrot" 2>/dev/null || true
+    sleep 1
     # Two layers of signal protection so the platform's cgroup-wide SIGTERM
     # cannot kill mandelbrot before cancel.sh gets to checkpoint it:
     #

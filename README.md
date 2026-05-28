@@ -28,6 +28,15 @@ Install Python dependencies once:
 pip3 install -r 02_webserver/requirements.txt
 ```
 
+**One-time CRIU setup (requires admin, done once per machine):**
+CRIU needs the `cap_checkpoint_restore` capability to run without root access:
+```bash
+sudo setcap cap_checkpoint_restore+eip $(which criu)
+# Verify:
+getcap $(which criu)
+# Expected: /usr/sbin/criu cap_checkpoint_restore=eip
+```
+
 ---
 
 ## Directory layout
@@ -269,7 +278,7 @@ cuda-checkpoint --toggle   resumes CUDA: reacquires GPU, restores device memory,
 
 ## Notes
 
-- `criu dump` and `criu restore` require `sudo` — only those two calls, not the rest.
+- `criu dump` and `criu restore` run as the regular user via the `cap_checkpoint_restore` capability (see one-time setup in Requirements).
 - Does not support UVM or IPC memory (current cuda-checkpoint limitation).
 - Source and target machines must have the same GPU driver version.
 - The binary must be at the **same absolute path** on both machines.

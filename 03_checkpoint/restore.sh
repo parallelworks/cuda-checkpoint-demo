@@ -20,7 +20,9 @@
 # │     cd 01_fractal && make                                                  │
 # └─────────────────────────────────────────────────────────────────────────────┘
 #
-# NOTE: criu restore requires elevated privileges (sudo).
+# PREREQUISITES (one-time admin setup):
+#   CRIU requires the cap_checkpoint_restore capability to run without root:
+#     sudo setcap cap_checkpoint_restore+eip $(which criu)
 
 set -euo pipefail
 
@@ -40,6 +42,22 @@ echo "    $CHECKPOINTS_DIR/"
 echo ""
 
 # ── Pre-flight checks ─────────────────────────────────────────────────────────
+_CRIU_BIN=$(command -v criu 2>/dev/null)
+if [[ -z "$_CRIU_BIN" ]]; then
+    echo "ERROR: criu not found in PATH. Install CRIU first."
+    exit 1
+fi
+_CRIU_CAPS=$(getcap "$_CRIU_BIN" 2>/dev/null || echo "")
+if ! echo "$_CRIU_CAPS" | grep -qE "cap_checkpoint_restore|cap_sys_admin"; then
+    echo "ERROR: CRIU is not configured for non-root operation."
+    echo ""
+    echo "  Ask your system administrator to run once:"
+    echo "    sudo setcap cap_checkpoint_restore+eip $_CRIU_BIN"
+    echo ""
+    echo "  Then verify with: getcap $_CRIU_BIN"
+    exit 1
+fi
+
 if [[ ! -d "$CHECKPOINTS_DIR" ]]; then
     echo "ERROR: $CHECKPOINTS_DIR not found."
     echo "Run checkpoint.sh first (or copy checkpoint images here)."
@@ -72,18 +90,19 @@ print(f\"    Progress: {p.get('percent',0):.1f}% ({p.get('rows_done','?')}/{p.ge
 fi
 
 # ── Step 1: Restore process with CRIU ────────────────────────────────────────
-echo "[1/3] Restoring process with CRIU (requires sudo) …"
+echo "[1/3] Restoring process with CRIU …"
 echo "      The restored process will block at its next CUDA call"
 echo "      until we run cuda-checkpoint --toggle in step 3."
 echo ""
 
 # --restore-detached: run the restored process in the background
 # (otherwise criu restore itself becomes the parent and blocks)
-sudo criu restore \
-    --images-dir  "$CHECKPOINTS_DIR" \
+criu restore \
+    --images-dir     "$CHECKPOINTS_DIR" \
     --restore-detached \
-    --log-file    criu-restore.log \
-    -v4
+    --log-file       criu-restore.log \
+    -v4 \
+    --unprivileged
 
 echo "      CRIU restore launched."
 
@@ -126,15 +145,11 @@ fi
 # ── Step 3: Resume CUDA state ─────────────────────────────────────────────────
 echo ""
 echo "[3/3] Resuming CUDA state …"
-# sudo is required here: criu restore runs as root, which leaves the CUDA
-# checkpoint channel in a state that only root can access via cuda-checkpoint.
-# The same binary works without sudo for a freshly launched process, but after
-# a CRIU restore the toggle must be run with elevated privileges.
-echo "      sudo cuda-checkpoint --toggle --pid $NEW_PID"
-sudo "$CUDA_CKPT" --toggle --pid "$NEW_PID"
+echo "      cuda-checkpoint --toggle --pid $NEW_PID"
+"$CUDA_CKPT" --toggle --pid "$NEW_PID"
 echo "      GPU memory restored; CUDA execution resumed."
 
-STATE=$(sudo "$CUDA_CKPT" --get-state --pid "$NEW_PID" 2>&1 || true)
+STATE=$("$CUDA_CKPT" --get-state --pid "$NEW_PID" 2>&1 || true)
 echo "      State after toggle: $STATE"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
